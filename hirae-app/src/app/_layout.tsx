@@ -5,6 +5,7 @@ import { Outfit_400Regular, Outfit_500Medium, Outfit_600SemiBold, Outfit_700Bold
 import { Gaegu_400Regular, Gaegu_700Bold } from '@expo-google-fonts/gaegu';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
+import { TrackingProvider } from '@/context/tracking-context';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -23,7 +24,9 @@ export default function RootLayout() {
   return (
     <ThemeProvider value={DefaultTheme}>
       <AnimatedSplashOverlay />
-      <Stack screenOptions={{ headerShown: false }} />
+      <TrackingProvider>
+        <Stack screenOptions={{ headerShown: false }} />
+      </TrackingProvider>
     </ThemeProvider>
   );
 }

@@ -42,3 +42,11 @@ export function formatJoinDate(iso: string): string {
     year: 'numeric',
   });
 }
+
+export function formatElapsed(ms: number): string {
+  const totalMinutes = Math.floor(ms / 60000);
+  if (totalMinutes < 60) return `${totalMinutes} min`;
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${hours}h ${minutes}m`;
+}

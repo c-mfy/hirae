@@ -9,6 +9,7 @@
     "@expo/vector-icons": "^15.1.1",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@rnmapbox/maps": "^10.3.5",
+    "@turf/turf": "^7.4.0",
     "expo": "~57.0.12",
     "expo-constants": "~57.0.10",
     "expo-dev-client": "~57.0.11",
