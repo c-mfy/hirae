@@ -3,6 +3,7 @@ import type { Feature, Polygon, MultiPolygon } from 'geojson';
 import type { PathPoint } from '@/hooks/use-location-tracking';
 
 import type { Coord } from '@/hooks/use-location-tracking';
+import type { Boundary } from '@/types/boundary';
 
 export const REVEAL_RADIUS_M = 40;
 
@@ -48,4 +49,57 @@ export function pathCentroid(path: PathPoint[]): Coord | null {
     [0, 0]
   );
   return [sum[0] / path.length, sum[1] / path.length];
+}
+
+/**
+ * What fraction of a boundary has been revealed, as a percentage.
+ * Clips the visited area to the boundary first — walking outside the
+ * city shouldn't inflate your city percentage.
+ */
+export function percentRevealed(
+  visited: VisitedArea,
+  boundary: Boundary | null
+): number | null {
+  if (!visited || !boundary || boundary.areaSqM <= 0) return null;
+
+  try {
+    const clipped = turf.intersect(
+      turf.featureCollection([visited, boundary.geometry])
+    );
+    if (!clipped) return 0;
+
+    return (turf.area(clipped) / boundary.areaSqM) * 100;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fold a finished session's corridor into the accumulated shape.
+ * Called once per completed walk, not per GPS point — this is the
+ * expensive operation, deliberately moved off the hot path.
+ */
+export function mergeVisitedArea(
+  settled: VisitedArea,
+  addition: VisitedArea
+): VisitedArea {
+  if (!addition) return settled;
+  if (!settled) return addition;
+
+  try {
+    const combined: Feature<Polygon | MultiPolygon> | null = turf.union(
+      turf.featureCollection([settled, addition])
+    );
+    if (!combined) return settled;
+
+    // Keep the accumulated shape from growing unbounded in vertex count.
+    const simplified = turf.simplify(combined, {
+      tolerance: 0.00003,
+      highQuality: false,
+    });
+
+    return simplified as Feature<Polygon | MultiPolygon>;
+  } catch {
+    return settled;
+  }
 }

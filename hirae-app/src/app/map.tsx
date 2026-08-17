@@ -14,7 +14,7 @@ import NavigationBar from '@/components/navigation-bar';
 import { ThemedText } from '@/components/themed-text';
 import { getNearbyLandmarks } from '@/data/landmarks';
 import type { Landmark } from '@/types/landmark';
-import { formatDistance, formatElapsed } from '@/utils/format';
+import { formatDistance, formatElapsed, formatPercent } from '@/utils/format';
 import { useTracking } from '@/context/tracking-context';
 import { useElapsed } from '@/hooks/use-elapsed';
 import { Colors, Fonts, Radius, ScreenPadding } from '@/constants/theme';
@@ -24,6 +24,7 @@ Mapbox.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '');
 const CAPTURE_RADIUS_M = 75;
 const SHEET_COLLAPSED = 64;
 const SHEET_EXPANDED = Dimensions.get('window').height * 0.42;
+const SHEET_TRAVEL = SHEET_EXPANDED - SHEET_COLLAPSED;
 
 export default function MapScreen() {
     const [landmarks, setLandmarks] = useState<Landmark[]>([]);
@@ -31,7 +32,8 @@ export default function MapScreen() {
 
     const {
         coords,
-        visitedArea,
+        settledArea,
+        liveArea,
         error: locationError,
         sessionState,
         startedAt,
@@ -40,11 +42,14 @@ export default function MapScreen() {
         mockMode,
         setMockMode,
         resetTracking,
+        boundary,
+        percent,
     } = useTracking();
 
     const elapsed = useElapsed(startedAt, mockMode ? latestTimestamp : undefined);
 
-    const sheetHeight = useRef(new Animated.Value(SHEET_COLLAPSED)).current;
+    // Starts pushed down (collapsed), animates to 0 (expanded).
+    const slide = useRef(new Animated.Value(SHEET_TRAVEL)).current;
     const cameraRef = useRef<React.ElementRef<typeof Camera>>(null);
 
     useFocusEffect(
@@ -68,9 +73,9 @@ export default function MapScreen() {
     const toggleSheet = () => {
         const next = !expanded;
         setExpanded(next);
-        Animated.spring(sheetHeight, {
-            toValue: next ? SHEET_EXPANDED : SHEET_COLLAPSED,
-            useNativeDriver: false,
+        Animated.spring(slide, {
+            toValue: next ? 0 : SHEET_TRAVEL,
+            useNativeDriver: true,
             friction: 9,
             tension: 60,
         }).start();
@@ -79,23 +84,17 @@ export default function MapScreen() {
     return (
         <View style={styles.root}>
             <MapView style={styles.map} styleURL={Mapbox.StyleURL.Light}>
-                {visitedArea && (
-                    <ShapeSource id="visited" shape={visitedArea}>
-                        <FillLayer
-                            id="visited-fill"
-                            style={{
-                                fillColor: Colors.primary,
-                                fillOpacity: 0.18,
-                            }}
-                        />
-                        <LineLayer
-                            id="visited-outline"
-                            style={{
-                                lineColor: Colors.primary,
-                                lineWidth: 1.5,
-                                lineOpacity: 0.5,
-                            }}
-                        />
+                {settledArea && (
+                    <ShapeSource id="settled" shape={settledArea}>
+                        <FillLayer id="settled-fill" style={{ fillColor: Colors.primary, fillOpacity: 0.18 }} />
+                        <LineLayer id="settled-outline" style={{ lineColor: Colors.primary, lineWidth: 1.5, lineOpacity: 0.5 }} />
+                    </ShapeSource>
+                )}
+
+                {liveArea && (
+                    <ShapeSource id="live" shape={liveArea}>
+                        <FillLayer id="live-fill" style={{ fillColor: Colors.primary, fillOpacity: 0.18 }} />
+                        <LineLayer id="live-outline" style={{ lineColor: Colors.primary, lineWidth: 1.5, lineOpacity: 0.5 }} />
                     </ShapeSource>
                 )}
 
@@ -134,10 +133,14 @@ export default function MapScreen() {
 
                 <View style={styles.scopeBlock}>
                     <View style={styles.percentRow}>
-                        <ThemedText style={styles.percentValue}>32</ThemedText>
+                        <ThemedText style={styles.percentValue}>
+                            {formatPercent(percent)}
+                        </ThemedText>
                         <ThemedText style={styles.percentUnit}>%</ThemedText>
                     </View>
-                    <ThemedText style={styles.scopeLabel}>San Francisco ▾</ThemedText>
+                    <ThemedText style={styles.scopeLabel}>
+                        {boundary?.name ?? 'Locating…'} ▾
+                    </ThemedText>
                 </View>
             </View>
 
@@ -149,7 +152,11 @@ export default function MapScreen() {
                 </View>
             )}
 
-            <Animated.View style={[styles.floatingButtons, { bottom: sheetHeight }]}>
+            <Animated.View
+                style={[
+                    styles.floatingButtons,
+                    { transform: [{ translateY: Animated.subtract(slide, SHEET_TRAVEL) }] },
+                ]}>
                 <Pressable
                     style={[styles.iconButton, mockMode && styles.iconButtonActive]}
                     onPress={() => setMockMode(!mockMode)}>
@@ -183,43 +190,41 @@ export default function MapScreen() {
                 )}
             </Animated.View>
 
-            <Animated.View style={[styles.sheet, { height: sheetHeight }]}>
+            <Animated.View style={[styles.sheet, { transform: [{ translateY: slide }] }]}>
                 <Pressable style={styles.handleArea} onPress={toggleSheet} hitSlop={10}>
                     <View style={styles.handle} />
                 </Pressable>
 
-                {expanded && (
-                    <>
-                        <ThemedText style={styles.sheetTitle}>NEARBY LANDMARKS</ThemedText>
-                        <ScrollView
-                            style={styles.list}
-                            contentContainerStyle={styles.listContent}
-                            showsVerticalScrollIndicator={false}>
-                            {landmarks.map((landmark, index) => (
-                                <View key={landmark.id}>
-                                    {index > 0 && <View style={styles.rowDivider} />}
-                                    <Pressable
-                                        style={styles.landmarkRow}
-                                        disabled={!landmark.discovered}
-                                        onPress={() => { }}>
-                                        <View style={styles.thumb} />
-                                        <View style={styles.landmarkText}>
-                                            <ThemedText
-                                                style={[styles.landmarkName, !landmark.discovered && styles.dimmed]}>
-                                                {landmark.name}
-                                            </ThemedText>
-                                            <ThemedText
-                                                style={[styles.landmarkMeta, !landmark.discovered && styles.dimmed]}>
-                                                {formatDistance(landmark.distanceMeters)} away
-                                            </ThemedText>
-                                        </View>
-                                    </Pressable>
+                <ThemedText style={styles.sheetTitle}>NEARBY LANDMARKS</ThemedText>
+
+                <ScrollView
+                    style={styles.list}
+                    contentContainerStyle={styles.listContent}
+                    showsVerticalScrollIndicator={false}>
+                    {landmarks.map((landmark, index) => (
+                        <View key={landmark.id}>
+                            {index > 0 && <View style={styles.rowDivider} />}
+                            <Pressable
+                                style={styles.landmarkRow}
+                                disabled={!landmark.discovered}
+                                onPress={() => { }}>
+                                <View style={styles.thumb} />
+                                <View style={styles.landmarkText}>
+                                    <ThemedText
+                                        style={[styles.landmarkName, !landmark.discovered && styles.dimmed]}>
+                                        {landmark.name}
+                                    </ThemedText>
+                                    <ThemedText
+                                        style={[styles.landmarkMeta, !landmark.discovered && styles.dimmed]}>
+                                        {formatDistance(landmark.distanceMeters)} away
+                                    </ThemedText>
                                 </View>
-                            ))}
-                        </ScrollView>
-                        <NavigationBar />
-                    </>
-                )}
+                            </Pressable>
+                        </View>
+                    ))}
+                </ScrollView>
+
+                <NavigationBar />
             </Animated.View>
         </View>
     );
@@ -293,8 +298,8 @@ const styles = StyleSheet.create({
     floatingButtons: {
         position: 'absolute',
         right: ScreenPadding,
+        bottom: SHEET_COLLAPSED + 16,
         gap: 10,
-        marginBottom: 16,
     },
     iconButton: {
         width: 52,
@@ -312,6 +317,7 @@ const styles = StyleSheet.create({
         left: 0,
         right: 0,
         bottom: 0,
+        height: SHEET_EXPANDED,
         backgroundColor: Colors.background,
         borderTopLeftRadius: 28,
         borderTopRightRadius: 28,

@@ -50,3 +50,10 @@ export function formatElapsed(ms: number): string {
   const minutes = totalMinutes % 60;
   return `${hours}h ${minutes}m`;
 }
+
+export function formatPercent(value: number | null): string {
+  if (value == null) return '—';
+  if (value > 0 && value < 0.1) return '<0.1';
+  if (value < 10) return value.toFixed(1);
+  return String(Math.round(value));
+}

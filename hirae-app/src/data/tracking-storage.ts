@@ -1,7 +1,31 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { PathPoint } from '@/hooks/use-location-tracking';
+import type { VisitedArea } from '@/utils/visited-area';
 
-const PATH_KEY = 'hirae:visited-path';
+const AREA_KEY = 'hirae:visited-area';
+const PATH_KEY = 'hirae:active-path';
+
+// --- Settled area (everything from finished sessions) ---
+
+export async function loadVisitedArea(): Promise<VisitedArea> {
+  try {
+    const raw = await AsyncStorage.getItem(AREA_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveVisitedArea(area: VisitedArea): Promise<void> {
+  try {
+    if (area) await AsyncStorage.setItem(AREA_KEY, JSON.stringify(area));
+  } catch {
+    // best effort
+  }
+}
+
+// --- Active path (current, unmerged session) ---
+// Kept so an in-progress walk survives the app being killed.
 
 export async function loadPath(): Promise<PathPoint[]> {
   try {
@@ -18,15 +42,14 @@ export async function savePath(path: PathPoint[]): Promise<void> {
   try {
     await AsyncStorage.setItem(PATH_KEY, JSON.stringify(path));
   } catch {
-    // Storage failures shouldn't crash tracking — worst case we lose
-    // progress on this launch rather than breaking the session.
+    // best effort
   }
 }
 
-export async function clearPath(): Promise<void> {
+export async function clearAll(): Promise<void> {
   try {
-    await AsyncStorage.removeItem(PATH_KEY);
+    await AsyncStorage.multiRemove([AREA_KEY, PATH_KEY]);
   } catch {
-    // ignore
+    // best effort
   }
 }

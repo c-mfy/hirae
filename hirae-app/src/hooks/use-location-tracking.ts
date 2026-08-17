@@ -14,20 +14,46 @@ type Options = {
   initialPath?: PathPoint[];
 };
 
-const MOCK_PATH: Coord[] = [
-  [-82.0564, 33.5292],
-  [-82.0557, 33.5295],
-  [-82.0549, 33.5298],
-  [-82.0541, 33.5300],
-  [-82.0535, 33.5297],
-  [-82.0531, 33.5291],
-  [-82.0537, 33.5286],
-  [-82.0545, 33.5283],
-  [-82.0554, 33.5285],
-  [-82.0561, 33.5288],
-];
+// --- Mock route -------------------------------------------------------
+// A serpentine sweep covering Georgia Tech and Midtown Atlanta.
+// Rows are spaced slightly tighter than the reveal diameter so the
+// corridors merge into solid coverage rather than parallel stripes.
 
-const MOCK_INTERVAL_MS = 2000;
+const MOCK_BOUNDS = {
+  south: 33.7700,
+  north: 33.7900,
+  west: -84.4020,
+  east: -84.3750,
+};
+
+const ROW_SPACING_DEG = 0.00072; // ~80m — just under the reveal width
+const STEP_DEG = 0.0027;         // ~250m between points along a row
+
+function buildSweep(): Coord[] {
+  const path: Coord[] = [];
+  let eastward = true;
+
+  for (let lat = MOCK_BOUNDS.south; lat <= MOCK_BOUNDS.north; lat += ROW_SPACING_DEG) {
+    const lngs: number[] = [];
+    for (let lng = MOCK_BOUNDS.west; lng <= MOCK_BOUNDS.east; lng += STEP_DEG) {
+      lngs.push(lng);
+    }
+    if (!eastward) lngs.reverse();
+
+    for (const lng of lngs) {
+      path.push([Number(lng.toFixed(6)), Number(lat.toFixed(6))]);
+    }
+    eastward = !eastward;
+  }
+
+  return path;
+}
+
+const MOCK_PATH: Coord[] = buildSweep();
+
+export const MOCK_CENTER: Coord = [-84.3885, 33.7800];
+
+const MOCK_INTERVAL_MS = 300;
 
 // Reject fixes we can't trust, in metres.
 const MAX_ACCURACY_M = 25;
@@ -79,11 +105,11 @@ export function useLocationTracking({ mock = false, initialPath }: Options = {})
         const index = mockIndex.current;
         mockIndex.current += 1;
 
-        const WALK_STEPS = MOCK_PATH.length * 2; // two laps ≈ 15 simulated minutes
+        const WALK_STEPS = MOCK_PATH.length; // one full sweep
         const coord =
           index < WALK_STEPS
-            ? MOCK_PATH[index % MOCK_PATH.length]
-            : MOCK_PATH[MOCK_PATH.length - 1];
+            ? MOCK_PATH[index]
+            : MOCK_PATH[MOCK_PATH.length - 1]; // park at the end
 
         // Simulated clock, not the real one.
         const timestamp = startWallClock + index * MOCK_INTERVAL_MS * MOCK_TIME_SCALE;
@@ -102,7 +128,7 @@ export function useLocationTracking({ mock = false, initialPath }: Options = {})
 
       tick();
       const timer = setInterval(tick, MOCK_INTERVAL_MS);
-      
+
       return () => clearInterval(timer);
     }
 
@@ -187,5 +213,3 @@ export function useLocationTracking({ mock = false, initialPath }: Options = {})
 
   return { coords, path, error, resetPath };
 }
-
-export const MOCK_CENTER: Coord = [-82.0547, 33.5291];
